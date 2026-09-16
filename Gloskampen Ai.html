@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gloskampen</title>
+  <style>
+    :root {
+      --bg-color: #f4f7f6;
+      --card-bg: #ffffff;
+      --primary: #4a90e2;
+      --primary-hover: #357abd;
+      --success: #2ecc71;
+      --error: #e74c3c;
+      --text: #333333;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .container {
+      background: var(--card-bg);
+      padding: 25px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 500px;
+      text-align: center;
+    }
+
+    h1, h2 { margin-top: 0; color: #2c3e50; }
+
+    select, input, button, textarea {
+      width: 100%;
+      padding: 12px 15px;
+      margin: 8px 0;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: 2px solid #ddd;
+      box-sizing: border-box;
+      font-family: inherit;
+    }
+
+    select:focus, input:focus, textarea:focus { border-color: var(--primary); outline: none; }
+
+    button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover { background-color: var(--primary-hover); }
+
+    .btn-secondary { background-color: #7f8c8d; }
+    .btn-secondary:hover { background-color: #6c7a7d; }
+
+    .btn-action-group { display: flex; gap: 8px; }
+    .btn-action-group button { width: 50%; }
+
+    .btn-danger {
+      background-color: #e74c3c;
+      font-size: 0.85rem;
+      padding: 8px;
+      margin-top: 15px;
+    }
+
+    .word-row { display: flex; gap: 10px; margin-bottom: 6px; }
+    .word-row input { margin: 0; }
+
+    .word-display-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin: 20px 0 10px 0;
+    }
+
+    .word-display { font-size: 2.2rem; font-weight: bold; color: #2c3e50; }
+
+    .audio-btn {
+      width: auto;
+      padding: 10px 15px;
+      margin: 0;
+      font-size: 1.5rem;
+      background: #eef5fc;
+      color: #4a90e2;
+      border: 2px solid #4a90e2;
+      border-radius: 50%;
+    }
+    
+    .audio-btn:hover { background: #d6e8f9; }
+
+    .hint { font-style: italic; color: #7f8c8d; margin-bottom: 20px; }
+
+    .feedback { font-weight: bold; margin: 15px 0; min-height: 24px; line-height: 1.4; }
+    .feedback.correct { color: var(--success); }
+    .feedback.wrong { color: var(--error); }
+
+    .score-board { font-size: 0.9rem; color: #7f8c8d; margin-top: 15px; }
+
+    .hidden { display: none; }
+    
+    #word-inputs-container {
+      max-height: 280px;
+      overflow-y: auto;
+      margin: 10px 0;
+      padding-right: 5px;
+    }
+
+    .ai-import-box {
+      background: #fdfdfd;
+      border: 2px dashed #bdc3c7;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      text-align: left;
+    }
+    .ai-import-box p { margin-top: 0; font-size: 0.85rem; color: #7f8c8d; }
+    
+    #ocr-status {
+      font-size: 0.85rem;
+      color: var(--primary);
+      font-weight: bold;
+      margin-top: 5px;
+      min-height: 20px;
+    }
+  </style>
+
+  <!-- Firebase Scripts -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  
+  <!-- Tesseract.js (Gratis AI för textigenkänning) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Välkommen till Gloskampen!💪</h1>
+
+    <!-- 1. START-SKÄRM -->
+    <div id="setup-screen">
+      <div id="loading-view">Laddar glosor från molnet... ☁️</div>
+
+      <div id="has-weeks-view" class="hidden">
+        <label for="week-select"><strong>Välj vecka:</strong></label>
+        <select id="week-select"></select>
+
+        <label for="mode-select"><strong>Träningsläge:</strong></label>
+        <select id="mode-select">
+          <option value="en-to-sv">Engelska ➡️ Svenska</option>
+          <option value="sv-to-en">Svenska ➡️ Engelska</option>
+        </select>
+
+        <button onclick="startQuiz()">Starta träningen!</button>
+
+        <div class="btn-action-group">
+          <button class="btn-secondary" onclick="showAddWeekScreen()">➕ Ny vecka</button>
+          <button class="btn-secondary" onclick="editCurrentWeek()">✏️ Redigera</button>
+        </div>
+
+        <button class="btn-danger" onclick="deleteCurrentWeek()">🗑️ Ta bort vald vecka</button>
+      </div>
+
+      <div id="no-weeks-view" class="hidden">
+        <p>Inga glosor inlagda i molnet än!</p>
+        <button onclick="showAddWeekScreen()">➕ Skapa första veckans glosor</button>
+      </div>
+    </div>
+
+    <!-- 2. LÄGGA TILL / REDIGERA VECKA -->
+    <div id="add-week-screen" class="hidden">
+      <h2 id="form-title">Lägg till glosor</h2>
+      <input type="text" id="new-week-title" placeholder="T.ex. Vecka 42" required>
+      
+      <!-- AI-KAMERA IMPORT -->
+      <div class="ai-import-box">
+        <p><strong>📸 AI-Skanner:</strong> Ta ett kort på läxan så läser appen av texten automatiskt!</p>
+        
+        <!-- Göm input, triggas via knappen -->
+        <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden" onchange="processImage(event)">
+        
+        <button type="button" onclick="document.getElementById('camera-input').click()" style="background-color: #2c3e50;">
+          📸 Ta kort på läxan
+        </button>
+        
+        <div id="ocr-status"></div>
+
+        <textarea id="bulk-import" rows="3" placeholder="AI:n klistrar in texten här... Du kan även skriva själv."></textarea>
+        <button type="button" class="btn-secondary" onclick="processBulkImport()" style="padding: 8px;">🪄 Skapa rader från texten</button>
+      </div>
+
+      <div id="word-inputs-container"></div>
+
+      <button type="button" class="btn-secondary" onclick="addWordRow()" style="font-size: 0.9rem;">+ Lägg till 1 tom rad</button>
+      <button type="button" id="save-btn" onclick="saveWeek()">💾 Spara till molnet</button>
+      <button type="button" class="btn-secondary" onclick="cancelAddWeek()">Tillbaka</button>
+    </div>
+
+    <!-- 3. TESTSKÄRM -->
+    <div id="quiz-screen" class="hidden">
+      <div class="score-board">
+        Ord <span id="current-index">1</span> av <span id="total-words">0</span> | Poäng: <span id="score">0</span>
+      </div>
+
+      <div class="word-display-container">
+        <div class="word-display" id="target-word">---</div>
+        <button type="button" class="audio-btn" id="speak-btn" onclick="speakCurrentWord()" title="Lyssna">🔊</button>
+      </div>
+      <div class="hint" id="direction-hint">Översätt till svenska:</div>
+
+      <form onsubmit="checkAnswer(event)">
+        <input type="text" id="user-input" placeholder="Skriv ditt svar här..." autocomplete="off" required>
+        <button type="submit" id="submit-btn">Svara</button>
+      </form>
+
+      <div id="feedback" class="feedback"></div>
+      <button id="next-btn" class="hidden" onclick="nextWord()">Nästa ord ➡️</button>
+    </div>
+
+    <!-- 4. RESULTATSKÄRM -->
+    <div id="result-screen" class="hidden">
+      <h2>Snyggt jobbat! 🎉</h2>
+      <p id="final-score"></p>
+      <button onclick="restart()">Träna igen</button>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 🔑 KLISTRA IN DINA FIREBASE-UPPGIFTER HÄR:
+    // ==========================================
+  const firebaseConfig = {
+    apiKey: "${{secrets.API_KEY}}",
+    authDomain: "gloskampen-4b2e0.firebaseapp.com",
+    projectId: "gloskampen-4b2e0",
+    storageBucket: "gloskampen-4b2e0.firebasestorage.app",
+    messagingSenderId: "243391600074",
+    appId: "1:243391600074:web:443d515dbf1428e3bb6b33",
+    measurementId: "G-41GKLR62VN"
+  };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let vocabularyList = {};
+    let currentWords = [];
+    let currentIndex = 0;
+    let score = 0;
+    let mode = 'en-to-sv';
+    let editingWeekKey = null;
+
+    window.onload = () => {
+      // Ladda röster direkt
+      window.speechSynthesis.getVoices();
+
+      db.collection("glosor").onSnapshot((snapshot) => {
+        vocabularyList = {};
+        snapshot.forEach((doc) => {
+          vocabularyList[doc.id] = doc.data().words;
+        });
+        document.getElementById('loading-view').classList.add('hidden');
+        updateWeekDropdown();
+      }, (error) => {
+        console.error("Fel vid hämtning:", error);
+      });
+    };
+
+    function updateWeekDropdown() {
+      const select = document.getElementById('week-select');
+      select.innerHTML = '';
+      const weeks = Object.keys(vocabularyList);
+
+      if (weeks.length === 0) {
+        document.getElementById('has-weeks-view').classList.add('hidden');
+        document.getElementById('no-weeks-view').classList.remove('hidden');
+      } else {
+        document.getElementById('has-weeks-view').classList.remove('hidden');
+        document.getElementById('no-weeks-view').classList.add('hidden');
+        weeks.forEach(week => {
+          const option = document.createElement('option');
+          option.value = week;
+          option.textContent = week;
+          select.appendChild(option);
+        });
+      }
+    }
+
+    function showAddWeekScreen() {
+      editingWeekKey = null;
+      document.getElementById('form-title').textContent = "Lägg till glosor";
+      document.getElementById('setup-screen').classList.add('hidden');
+      document.getElementById('add-week-screen').classList.remove('hidden');
+      document.getElementById('new-week-title').value = '';
+      document.getElementById('bulk-import').value = '';
+      document.getElementById('ocr-status').textContent = '';
+      document.getElementById('word-inputs-container').innerHTML = '';
+    }
+
+    function editCurrentWeek() {
+      const selectedWeek = document.getElementById('week-select').value;
+      if (!selectedWeek) return;
+
+      editingWeekKey = selectedWeek;
+      document.getElementById('form-title').textContent = "Redigera glosor";
+      document.getElementById('setup-screen').classList.add('hidden');
+      document.getElementById('add-week-screen').classList.remove('hidden');
+      document.getElementById('new-week-title').value = selectedWeek;
+      document.getElementById('word-inputs-container').innerHTML = '';
+
+      const words = vocabularyList[selectedWeek];
+      words.forEach(w => { addWordRow(w.en, w.sv); });
+    }
+
+    // --- AI KAMERA-SKANNER (Tesseract.js) ---
+async function processImage(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const statusEl = document.getElementById('ocr-status');
+      statusEl.style.color = "var(--primary)";
+      statusEl.textContent = "Startar AI-motorn... ⏳";
+      
+      try {
+        // Tesseract v5 syntax: Språken och loggern laddas direkt i createWorker
+        const worker = await Tesseract.createWorker('eng+swe', 1, {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              statusEl.textContent = `Läser av bilden: ${Math.round(m.progress * 100)}% klara... ⏳`;
+            } else {
+              // Visar vad den gör i bakgrunden (t.ex. laddar ner språkfiler)
+              statusEl.textContent = `Förbereder: ${m.status}... ⏳`;
+            }
+          }
+        });
+        
+        // PSM 6 (SINGLE_BLOCK) tvingar AI:n att läsa rakt över mellanrummen
+        await worker.setParameters({
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+        });
+        
+        const result = await worker.recognize(file);
+        await worker.terminate(); // Stäng ner för att spara minne på telefonen
+        
+        document.getElementById('bulk-import').value = result.data.text;
+        statusEl.style.color = "var(--success)";
+        statusEl.textContent = "✅ Texten är inläst! Kontrollera den och klicka på knappen nedan.";
+      } catch (err) {
+        statusEl.style.color = "var(--error)";
+        statusEl.textContent = "❌ Ett fel uppstod. Ljuset kanske var för dåligt, försök igen.";
+        console.error(err);
+      }
+    }
+
+    function processBulkImport() {
+      const text = document.getElementById('bulk-import').value;
+      if (!text) return;
+      
+      const lines = text.split('\n');
+      lines.forEach(line => {
+        let parts = line.split(/[-=,]| {2,}/);
+        if (parts.length < 2) parts = line.split(' '); 
+
+        if (parts.length >= 2) {
+          const w1 = parts[0].trim();
+          const w2 = parts.slice(1).join(' ').trim();
+          
+          if (w1 && w2) {
+            addWordRow(w1, w2);
+          }
+        }
+      });
+      document.getElementById('bulk-import').value = ''; 
+    }
+
+    function addWordRow(enVal = '', svVal = '') {
+      const container = document.getElementById('word-inputs-container');
+      const row = document.createElement('div');
+      row.className = 'word-row';
+      row.innerHTML = `
+        <input type="text" class="en-input" placeholder="Engelska" value="${enVal}">
+        <input type="text" class="sv-input" placeholder="Svenska" value="${svVal}">
+      `;
+      container.appendChild(row);
+    }
+
+    async function saveWeek() {
+      const titleInput = document.getElementById('new-week-title').value.trim();
+      if (!titleInput) {
+        alert("Fyll i ett namn för veckan (t.ex. Vecka 42)");
+        return;
+      }
+
+      const enInputs = document.querySelectorAll('.en-input');
+      const svInputs = document.querySelectorAll('.sv-input');
+      const newWords = [];
+
+      for (let i = 0; i < enInputs.length; i++) {
+        const en = enInputs[i].value.trim();
+        const sv = svInputs[i].value.trim();
+        if (en && sv) { newWords.push({ en, sv }); }
+      }
+
+      if (newWords.length === 0) {
+        alert("Mata in minst ett glospar!");
+        return;
+      }
+
+      const saveBtn = document.getElementById('save-btn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Sparar...";
+
+      try {
+        if (editingWeekKey && editingWeekKey !== titleInput) {
+          await db.collection("glosor").doc(editingWeekKey).delete();
+        }
+        await db.collection("glosor").doc(titleInput).set({ words: newWords });
+        cancelAddWeek();
+      } catch (error) {
+        console.error("Kunde inte spara:", error);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "💾 Spara till molnet";
+      }
+    }
+
+    function cancelAddWeek() {
+      document.getElementById('add-week-screen').classList.add('hidden');
+      document.getElementById('setup-screen').classList.remove('hidden');
+    }
+
+    async function deleteCurrentWeek() {
+      const selectedWeek = document.getElementById('week-select').value;
+      if (confirm(`Är du säker på att du vill ta bort "${selectedWeek}"?`)) {
+        await db.collection("glosor").doc(selectedWeek).delete();
+      }
+    }
+
+    function startQuiz() {
+      const selectedWeek = document.getElementById('week-select').value;
+      mode = document.getElementById('mode-select').value;
+      
+      currentWords = [...vocabularyList[selectedWeek]].sort(() => Math.random() - 0.5);
+      currentIndex = 0;
+      score = 0;
+
+      document.getElementById('setup-screen').classList.add('hidden');
+      document.getElementById('result-screen').classList.add('hidden');
+      document.getElementById('quiz-screen').classList.remove('hidden');
+      document.getElementById('total-words').textContent = currentWords.length;
+      
+      showWord();
+    }
+
+    function showWord() {
+      document.getElementById('feedback').textContent = '';
+      document.getElementById('feedback').className = 'feedback';
+      document.getElementById('user-input').value = '';
+      document.getElementById('user-input').disabled = false;
+      document.getElementById('submit-btn').classList.remove('hidden');
+      document.getElementById('next-btn').classList.add('hidden');
+      document.getElementById('user-input').focus();
+
+      document.getElementById('current-index').textContent = currentIndex + 1;
+      document.getElementById('score').textContent = score;
+
+      const current = currentWords[currentIndex];
+      if (mode === 'en-to-sv') {
+        document.getElementById('target-word').textContent = current.en;
+        document.getElementById('direction-hint').textContent = 'Översätt till svenska:';
+        document.getElementById('speak-btn').style.display = 'inline-block';
+      } else {
+        document.getElementById('target-word').textContent = current.sv;
+        document.getElementById('direction-hint').textContent = 'Översätt till engelska:';
+        document.getElementById('speak-btn').style.display = 'none';
+      }
+    }
+
+    // --- FÖRBÄTTRAD RÖST ---
+    function speakCurrentWord() {
+      const current = currentWords[currentIndex];
+      const utterance = new SpeechSynthesisUtterance(current.en);
+      
+      // Långsammare, lugnare och tydligare uppläsning
+      utterance.rate = 0.8; 
+      utterance.lang = 'en-US';
+
+      // Leta efter de bästa inbyggda rösterna
+      const voices = window.speechSynthesis.getVoices();
+      
+      if (voices.length > 0) {
+        // Försök hitta en premium-röst först (Samantha på iOS, Google-röster på Android/Chrome)
+        const premiumVoice = voices.find(v => 
+          v.name.includes("Samantha") || 
+          v.name.includes("Google US English") || 
+          v.name.includes("Google UK English Female") ||
+          v.name.includes("Daniel") || 
+          v.name.includes("Premium")
+        );
+        
+        if (premiumVoice) {
+          utterance.voice = premiumVoice;
+        } else {
+          // Fallback till vilken engelsk röst som helst
+          const englishVoice = voices.find(v => v.lang.startsWith('en'));
+          if (englishVoice) utterance.voice = englishVoice;
+        }
+      }
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function checkAnswer(e) {
+      e.preventDefault();
+      const input = document.getElementById('user-input').value.trim().toLowerCase();
+      const current = currentWords[currentIndex];
+      const correctAnswer = mode === 'en-to-sv' ? current.sv.toLowerCase() : current.en.toLowerCase();
+      
+      const feedbackEl = document.getElementById('feedback');
+      document.getElementById('user-input').disabled = true;
+      document.getElementById('submit-btn').classList.add('hidden');
+
+      if (input === correctAnswer) {
+        score++;
+        feedbackEl.textContent = "Rätt! Bra jobbat! ⭐";
+        feedbackEl.className = "feedback correct";
+        if (mode === 'sv-to-en') { speakCurrentWord(); } 
+      } else {
+        const actualCorrect = mode === 'en-to-sv' ? current.sv : current.en;
+        feedbackEl.innerHTML = `Fel! Rätt svar var: <strong>${actualCorrect}</strong><br><small style="opacity:0.8">Du skrev: "${input}"</small>`;
+        feedbackEl.className = "feedback wrong";
+      }
+
+      document.getElementById('score').textContent = score;
+      document.getElementById('next-btn').classList.remove('hidden');
+      document.getElementById('next-btn').focus();
+    }
+
+    function nextWord() {
+      currentIndex++;
+      if (currentIndex < currentWords.length) {
+        showWord();
+      } else {
+        showResults();
+      }
+    }
+
+    function showResults() {
+      document.getElementById('quiz-screen').classList.add('hidden');
+      document.getElementById('result-screen').classList.remove('hidden');
+      document.getElementById('final-score').textContent = 
+        `Bra kört! Du fick ${score} av ${currentWords.length} rätt!`;
+    }
+
+    function restart() {
+      document.getElementById('result-screen').classList.add('hidden');
+      document.getElementById('setup-screen').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
