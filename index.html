@@ -237,14 +237,15 @@
     // 🔑 DIN FIREBASE- OCH GEMINI-KONFIGURATION:
     // ==========================================
     const firebaseConfig = {
-      apiKey: "${{secrets.API_KEY}}",
-      authDomain: "gloskampen-4b2e0.firebaseapp.com",
-      projectId: "gloskampen-4b2e0",
-      storageBucket: "gloskampen-4b2e0.firebasestorage.app",
-      messagingSenderId: "243391600074",
-      appId: "1:243391600074:web:443d515dbf1428e3bb6b33",
-      measurementId: "G-41GKLR62VN"
-    };
+  const firebaseConfig = {
+    apiKey: "${{secrets.API_KEY}}",
+    authDomain: "gloskampen-4b2e0.firebaseapp.com",
+    projectId: "gloskampen-4b2e0",
+    storageBucket: "gloskampen-4b2e0.firebasestorage.app",
+    messagingSenderId: "243391600074",
+    appId: "1:243391600074:web:443d515dbf1428e3bb6b33",
+    measurementId: "G-41GKLR62VN"
+  };
 
     // Klistra in din nyckel från Google AI Studio här:
     const GEMINI_API_KEY = "${{secrets.API_Ai}}";
