@@ -122,7 +122,7 @@
 
     .ai-import-box {
       background: #fdfdfd;
-      border: 2px dashed #bdc3c7;
+      border: 2px dashed #4a90e2;
       padding: 15px;
       border-radius: 8px;
       margin-bottom: 15px;
@@ -130,7 +130,7 @@
     }
     .ai-import-box p { margin-top: 0; font-size: 0.85rem; color: #7f8c8d; }
     
-    #ocr-status {
+    #ai-status {
       font-size: 0.85rem;
       color: var(--primary);
       font-weight: bold;
@@ -142,14 +142,11 @@
   <!-- Firebase Scripts -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  
-  <!-- Tesseract.js -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
 
   <div class="container">
-    <h1>Välkommen till Gloskampen!💪</h1>
+    <h1>🇬🇧 Gloskampen 🇸🇪</h1>
 
     <!-- 1. START-SKÄRM -->
     <div id="setup-screen">
@@ -186,26 +183,17 @@
       <h2 id="form-title">Lägg till glosor</h2>
       <input type="text" id="new-week-title" placeholder="T.ex. Vecka 42" required>
       
-      <!-- AI-KAMERA IMPORT -->
+      <!-- GEMINI AI-KAMERA -->
       <div class="ai-import-box">
-        <p><strong>📸 AI-Skanner:</strong> Ta ett kort på läxan så läser appen av texten automatiskt!</p>
+        <p><strong>✨ AI-Kamera:</strong> Ta ett kort direkt på läxan så läser moln-AI:n av orden perfekt åt dig!</p>
         
-        <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden" onchange="processImage(event)">
+        <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden" onchange="processImageWithGemini(event)">
         
-        <button type="button" onclick="document.getElementById('camera-input').click()" style="background-color: #2c3e50;">
-          📸 Ta kort på läxan
+        <button type="button" onclick="document.getElementById('camera-input').click()" style="background-color: #27ae60;">
+          📸 Fota läxan med AI
         </button>
         
-        <div id="ocr-status"></div>
-
-        <textarea id="bulk-import" rows="3" placeholder="AI:n klistrar in texten här... Du kan även skriva själv."></textarea>
-        
-        <select id="import-order" style="margin-bottom: 10px; font-size: 0.9rem;">
-          <option value="en-sv">Spaltordning: Engelska till vänster, Svenska till höger</option>
-          <option value="sv-en">Spaltordning: Svenska till vänster, Engelska till höger</option>
-        </select>
-
-        <button type="button" class="btn-secondary" onclick="processBulkImport()" style="padding: 8px;">🪄 Skapa rader från texten</button>
+        <div id="ai-status"></div>
       </div>
 
       <div id="word-inputs-container"></div>
@@ -246,7 +234,7 @@
 
   <script>
     // ==========================================
-    // 🔑 DIN FIREBASE-KONFIGURATION:
+    // 🔑 DIN FIREBASE- OCH GEMINI-KONFIGURATION:
     // ==========================================
     const firebaseConfig = {
       apiKey: "${{secrets.API_KEY}}",
@@ -257,6 +245,9 @@
       appId: "1:243391600074:web:443d515dbf1428e3bb6b33",
       measurementId: "G-41GKLR62VN"
     };
+
+    // Klistra in din nyckel från Google AI Studio här:
+    const GEMINI_API_KEY = "${{secrets.API_Ai}}";
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
@@ -309,8 +300,7 @@
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('add-week-screen').classList.remove('hidden');
       document.getElementById('new-week-title').value = '';
-      document.getElementById('bulk-import').value = '';
-      document.getElementById('ocr-status').textContent = '';
+      document.getElementById('ai-status').textContent = '';
       document.getElementById('word-inputs-container').innerHTML = '';
     }
 
@@ -329,99 +319,73 @@
       words.forEach(w => { addWordRow(w.en, w.sv); });
     }
 
-    // --- FIXAD BILDHANTERARE (Krymper mobilbilder så Tesseract förstår dem) ---
-    function processImage(event) {
+    // --- SKICKA BILD TILL GEMINI API ---
+    async function processImageWithGemini(event) {
       const file = event.target.files[0];
       if (!file) return;
-      
-      const statusEl = document.getElementById('ocr-status');
+
+      const statusEl = document.getElementById('ai-status');
       statusEl.style.color = "var(--primary)";
-      statusEl.textContent = "Förbereder bilden... ⏳";
+      statusEl.textContent = "Skickar bilden till AI... ⏳";
 
+      // Gör om bilden till Base64
       const reader = new FileReader();
-      reader.onload = function(e) {
-        const img = new Image();
-        img.onload = async function() {
-          // Skala ner bilden om den är för stor (vilket är standard för mobilkameror)
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          const maxDim = 1200; // Perfekt storlek för Tesseract
+      reader.onload = async function() {
+        const base64String = reader.result.split(',')[1];
+        const mimeType = file.type;
 
-          if (width > height && width > maxDim) {
-            height *= maxDim / width;
-            width = maxDim;
-          } else if (height > maxDim) {
-            width *= maxDim / height;
-            height = maxDim;
-          }
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: "Detta är en bild på en engelsk glosläxa med engelska ord i en kolumn och svenska ord i en annan. Läs av alla glosor. Svara ENDAST i exakt detta format per rad, ingenting annat: engelska|svenska (t.ex. dog|hund)." },
+                  { inline_data: { mime_type: mimeType, data: base64String } }
+                ]
+              }]
+            })
+          });
 
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Gör om till optimerad bildfil
-          const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-
-          statusEl.textContent = "Startar AI-motorn... ⏳";
-          
-          try {
-            const worker = await Tesseract.createWorker('eng+swe', 1, {
-              logger: m => {
-                if (m.status === 'recognizing text') {
-                  statusEl.textContent = `Läser av bilden: ${Math.round(m.progress * 100)}% klara... ⏳`;
-                } else {
-                  statusEl.textContent = `Förbereder: ${m.status}... ⏳`;
+          const data = await response.json();
+          if (data.candidates && data.candidates[0].content) {
+            const textResponse = data.candidates[0].content.parts[0].text;
+            
+            // Töm gamla rader och fyll i de nya
+            document.getElementById('word-inputs-container').innerHTML = '';
+            
+            const lines = textResponse.split('\n');
+            let addedCount = 0;
+            lines.forEach(line => {
+              const parts = line.split('|');
+              if (parts.length === 2) {
+                const en = parts[0].trim().replace(/^[-*•\d\.\s]+/, ''); // Rensa bort eventuella punktlistor
+                const sv = parts[1].trim().replace(/^[-*•\d\.\s]+/, '');
+                if (en && sv) {
+                  addWordRow(en, sv);
+                  addedCount++;
                 }
               }
             });
-            
-            await worker.setParameters({
-              tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
-            });
-            
-            const result = await worker.recognize(optimizedDataUrl);
-            await worker.terminate(); 
-            
-            document.getElementById('bulk-import').value = result.data.text;
-            statusEl.style.color = "var(--success)";
-            statusEl.textContent = "✅ Texten är inläst! Kontrollera den nedan.";
-          } catch (err) {
-            statusEl.style.color = "var(--error)";
-            statusEl.textContent = "❌ Ett fel uppstod vid avläsning.";
-            console.error(err);
+
+            if (addedCount > 0) {
+              statusEl.style.color = "var(--success)";
+              statusEl.textContent = `✅ Klart! AI:n hittade ${addedCount} glosor.`;
+            } else {
+              statusEl.style.color = "var(--error)";
+              statusEl.textContent = "❌ Kunde inte tolka orden från bilden. Prova igen.";
+            }
+          } else {
+            throw500();
           }
-        };
-        img.src = e.target.result;
+        } catch (err) {
+          statusEl.style.color = "var(--error)";
+          statusEl.textContent = "❌ Ett fel uppstod vid AI-anropet.";
+          console.error(err);
+        }
       };
       reader.readAsDataURL(file);
-    }
-
-    function processBulkImport() {
-      const text = document.getElementById('bulk-import').value;
-      const order = document.getElementById('import-order').value;
-      if (!text) return;
-      
-      const lines = text.split('\n');
-      lines.forEach(line => {
-        let parts = line.split(/[-=,]| {2,}/);
-        if (parts.length < 2) parts = line.split(' '); 
-
-        if (parts.length >= 2) {
-          const w1 = parts[0].trim();
-          const w2 = parts.slice(1).join(' ').trim();
-          
-          if (w1 && w2) {
-            if (order === 'en-sv') {
-              addWordRow(w1, w2);
-            } else {
-              addWordRow(w2, w1); 
-            }
-          }
-        }
-      });
-      document.getElementById('bulk-import').value = ''; 
     }
 
     function addWordRow(enVal = '', svVal = '') {
@@ -580,7 +544,7 @@
 
       document.getElementById('score').textContent = score;
       document.getElementById('next-btn').classList.remove('hidden');
-      document.getElementById('next-btn').focus();
+      document.getElementById('next-btn')->focus();
     }
 
     function nextWord() {
