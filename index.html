@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gloskampen</title>
+  <title>Gloskampen - Sakris Engelska</title>
   <style>
     :root {
       --bg-color: #f4f7f6;
@@ -190,7 +190,6 @@
       <div class="ai-import-box">
         <p><strong>📸 AI-Skanner:</strong> Ta ett kort på läxan så läser appen av texten automatiskt!</p>
         
-        <!-- Göm input, triggas via knappen -->
         <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden" onchange="processImage(event)">
         
         <button type="button" onclick="document.getElementById('camera-input').click()" style="background-color: #2c3e50;">
@@ -200,6 +199,13 @@
         <div id="ocr-status"></div>
 
         <textarea id="bulk-import" rows="3" placeholder="AI:n klistrar in texten här... Du kan även skriva själv."></textarea>
+        
+        <!-- Välj ordning på kolumnerna -->
+        <select id="import-order" style="margin-bottom: 10px; font-size: 0.9rem;">
+          <option value="en-sv">Spaltordning: Engelska till vänster, Svenska till höger</option>
+          <option value="sv-en">Spaltordning: Svenska till vänster, Engelska till höger</option>
+        </select>
+
         <button type="button" class="btn-secondary" onclick="processBulkImport()" style="padding: 8px;">🪄 Skapa rader från texten</button>
       </div>
 
@@ -241,17 +247,17 @@
 
   <script>
     // ==========================================
-    // 🔑 KLISTRA IN DINA FIREBASE-UPPGIFTER HÄR:
+    // 🔑 DIN FIREBASE-KONFIGURATION:
     // ==========================================
-  const firebaseConfig = {
-    apiKey: "${{secrets.API_KEY}}",
-    authDomain: "gloskampen-4b2e0.firebaseapp.com",
-    projectId: "gloskampen-4b2e0",
-    storageBucket: "gloskampen-4b2e0.firebasestorage.app",
-    messagingSenderId: "243391600074",
-    appId: "1:243391600074:web:443d515dbf1428e3bb6b33",
-    measurementId: "G-41GKLR62VN"
-  };
+    const firebaseConfig = {
+      apiKey: "${{secrets.API_KEY}}",
+      authDomain: "gloskampen-4b2e0.firebaseapp.com",
+      projectId: "gloskampen-4b2e0",
+      storageBucket: "gloskampen-4b2e0.firebasestorage.app",
+      messagingSenderId: "243391600074",
+      appId: "1:243391600074:web:443d515dbf1428e3bb6b33",
+      measurementId: "G-41GKLR62VN"
+    };
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
@@ -325,8 +331,8 @@
       words.forEach(w => { addWordRow(w.en, w.sv); });
     }
 
-    // --- AI KAMERA-SKANNER (Tesseract.js) ---
-async function processImage(event) {
+    // --- AI KAMERA-SKANNER (Tesseract.js v5) ---
+    async function processImage(event) {
       const file = event.target.files[0];
       if (!file) return;
       
@@ -335,25 +341,22 @@ async function processImage(event) {
       statusEl.textContent = "Startar AI-motorn... ⏳";
       
       try {
-        // Tesseract v5 syntax: Språken och loggern laddas direkt i createWorker
         const worker = await Tesseract.createWorker('eng+swe', 1, {
           logger: m => {
             if (m.status === 'recognizing text') {
               statusEl.textContent = `Läser av bilden: ${Math.round(m.progress * 100)}% klara... ⏳`;
             } else {
-              // Visar vad den gör i bakgrunden (t.ex. laddar ner språkfiler)
               statusEl.textContent = `Förbereder: ${m.status}... ⏳`;
             }
           }
         });
         
-        // PSM 6 (SINGLE_BLOCK) tvingar AI:n att läsa rakt över mellanrummen
         await worker.setParameters({
           tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
         });
         
         const result = await worker.recognize(file);
-        await worker.terminate(); // Stäng ner för att spara minne på telefonen
+        await worker.terminate(); 
         
         document.getElementById('bulk-import').value = result.data.text;
         statusEl.style.color = "var(--success)";
@@ -367,6 +370,7 @@ async function processImage(event) {
 
     function processBulkImport() {
       const text = document.getElementById('bulk-import').value;
+      const order = document.getElementById('import-order').value;
       if (!text) return;
       
       const lines = text.split('\n');
@@ -379,7 +383,11 @@ async function processImage(event) {
           const w2 = parts.slice(1).join(' ').trim();
           
           if (w1 && w2) {
-            addWordRow(w1, w2);
+            if (order === 'en-sv') {
+              addWordRow(w1, w2);
+            } else {
+              addWordRow(w2, w1); 
+            }
           }
         }
       });
@@ -489,32 +497,29 @@ async function processImage(event) {
       }
     }
 
-    // --- FÖRBÄTTRAD RÖST ---
     function speakCurrentWord() {
       const current = currentWords[currentIndex];
       const utterance = new SpeechSynthesisUtterance(current.en);
       
-      // Långsammare, lugnare och tydligare uppläsning
       utterance.rate = 0.8; 
       utterance.lang = 'en-US';
 
-      // Leta efter de bästa inbyggda rösterna
       const voices = window.speechSynthesis.getVoices();
       
       if (voices.length > 0) {
-        // Försök hitta en premium-röst först (Samantha på iOS, Google-röster på Android/Chrome)
-        const premiumVoice = voices.find(v => 
+        // Leta specifikt efter kända kvinnliga engelska röster
+        const femaleVoice = voices.find(v => 
           v.name.includes("Samantha") || 
-          v.name.includes("Google US English") || 
-          v.name.includes("Google UK English Female") ||
-          v.name.includes("Daniel") || 
-          v.name.includes("Premium")
+          v.name.includes("Zira") ||     
+          v.name.includes("Hazel") ||    
+          v.name.includes("Google UK English Female") || 
+          v.name.toLowerCase().includes("female") || 
+          v.name.includes("Google US English") 
         );
         
-        if (premiumVoice) {
-          utterance.voice = premiumVoice;
+        if (femaleVoice) {
+          utterance.voice = femaleVoice;
         } else {
-          // Fallback till vilken engelsk röst som helst
           const englishVoice = voices.find(v => v.lang.startsWith('en'));
           if (englishVoice) utterance.voice = englishVoice;
         }
