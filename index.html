@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gloskampen - Sakris Engelska</title>
+  <title>Gloskampen</title>
   <style>
     :root {
       --bg-color: #f4f7f6;
@@ -122,7 +122,7 @@
 
     .ai-import-box {
       background: #fdfdfd;
-      border: 2px dashed #4a90e2;
+      border: 2px dashed #27ae60;
       padding: 15px;
       border-radius: 8px;
       margin-bottom: 15px;
@@ -132,7 +132,7 @@
     
     #ai-status {
       font-size: 0.85rem;
-      color: var(--primary);
+      color: #27ae60;
       font-weight: bold;
       margin-top: 5px;
       min-height: 20px;
@@ -185,7 +185,7 @@
       
       <!-- GEMINI AI-KAMERA -->
       <div class="ai-import-box">
-        <p><strong>✨ AI-Kamera:</strong> Ta ett kort direkt på läxan så läser moln-AI:n av orden perfekt åt dig!</p>
+        <p><strong>✨ AI-Kamera:</strong> Ta ett kort direkt på läxan så läser moln-AI:n av orden automatiskt åt dig!</p>
         
         <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden" onchange="processImageWithGemini(event)">
         
@@ -234,18 +234,17 @@
 
   <script>
     // ==========================================
-    // 🔑 DIN FIREBASE- OCH GEMINI-KONFIGURATION:
+    // 🔑 KONFIGURATION (FIREBASE & GEMINI AI):
     // ==========================================
     const firebaseConfig = {
-  const firebaseConfig = {
-    apiKey: "${{secrets.API_KEY}}",
-    authDomain: "gloskampen-4b2e0.firebaseapp.com",
-    projectId: "gloskampen-4b2e0",
-    storageBucket: "gloskampen-4b2e0.firebasestorage.app",
-    messagingSenderId: "243391600074",
-    appId: "1:243391600074:web:443d515dbf1428e3bb6b33",
-    measurementId: "G-41GKLR62VN"
-  };
+      apiKey: "${{secrets.API_KEY}}",
+      authDomain: "gloskampen-4b2e0.firebaseapp.com",
+      projectId: "gloskampen-4b2e0",
+      storageBucket: "gloskampen-4b2e0.firebasestorage.app",
+      messagingSenderId: "243391600074",
+      appId: "1:243391600074:web:443d515dbf1428e3bb6b33",
+      measurementId: "G-41GKLR62VN"
+    };
 
     // Klistra in din nyckel från Google AI Studio här:
     const GEMINI_API_KEY = "${{secrets.API_Ai}}";
@@ -272,6 +271,10 @@
         updateWeekDropdown();
       }, (error) => {
         console.error("Fel vid hämtning:", error);
+        document.getElementById('loading-view').innerHTML = `
+          ❌ Kunde inte ladda från molnet!<br>
+          <small style="color:red;">Kolla att Firestore Rules tillåter läsning.</small>
+        `;
       });
     };
 
@@ -320,16 +323,14 @@
       words.forEach(w => { addWordRow(w.en, w.sv); });
     }
 
-    // --- SKICKA BILD TILL GEMINI API ---
+    // --- GEMINI AI KAMERA-SKANNER ---
     async function processImageWithGemini(event) {
       const file = event.target.files[0];
       if (!file) return;
 
       const statusEl = document.getElementById('ai-status');
-      statusEl.style.color = "var(--primary)";
       statusEl.textContent = "Skickar bilden till AI... ⏳";
 
-      // Gör om bilden till Base64
       const reader = new FileReader();
       reader.onload = async function() {
         const base64String = reader.result.split(',')[1];
@@ -353,7 +354,6 @@
           if (data.candidates && data.candidates[0].content) {
             const textResponse = data.candidates[0].content.parts[0].text;
             
-            // Töm gamla rader och fyll i de nya
             document.getElementById('word-inputs-container').innerHTML = '';
             
             const lines = textResponse.split('\n');
@@ -361,7 +361,7 @@
             lines.forEach(line => {
               const parts = line.split('|');
               if (parts.length === 2) {
-                const en = parts[0].trim().replace(/^[-*•\d\.\s]+/, ''); // Rensa bort eventuella punktlistor
+                const en = parts[0].trim().replace(/^[-*•\d\.\s]+/, '');
                 const sv = parts[1].trim().replace(/^[-*•\d\.\s]+/, '');
                 if (en && sv) {
                   addWordRow(en, sv);
@@ -378,11 +378,12 @@
               statusEl.textContent = "❌ Kunde inte tolka orden från bilden. Prova igen.";
             }
           } else {
-            throw500();
+            statusEl.style.color = "var(--error)";
+            statusEl.textContent = "❌ AI-svar saknas. Kolla din API-nyckel.";
           }
         } catch (err) {
           statusEl.style.color = "var(--error)";
-          statusEl.textContent = "❌ Ett fel uppstod vid AI-anropet.";
+          statusEl.textContent = "❌ Ett fel uppstod vid nätverksanropet.";
           console.error(err);
         }
       };
@@ -545,7 +546,7 @@
 
       document.getElementById('score').textContent = score;
       document.getElementById('next-btn').classList.remove('hidden');
-      document.getElementById('next-btn')->focus();
+      document.getElementById('next-btn').focus();
     }
 
     function nextWord() {
