@@ -3,7 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gloskampen</title>
+  <title>Gloskampen💪</title>
+  
+  <!-- Googles officiella Gen AI SDK för webben -->
+  <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://esm.run/@google/genai"
+      }
+    }
+  </script>
+
   <style>
     :root {
       --bg-color: #f4f7f6;
@@ -232,7 +242,9 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import { GoogleGenAI } from "@google/genai";
+
     // ==========================================
     // 🔑 KONFIGURATION (FIREBASE & GEMINI AI):
     // ==========================================
@@ -246,11 +258,14 @@
       measurementId: "G-41GKLR62VN"
     };
 
-    // Klistra in din nyckel från Google AI Studio här:
+    // Klistra in din AQ-nyckel här:
     const GEMINI_API_KEY = "${{secrets.API_AI}}";
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+
+    // Initiera Google Gen AI-klienten med din nyckel
+    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
     let vocabularyList = {};
     let currentWords = [];
@@ -298,7 +313,7 @@
       }
     }
 
-    function showAddWeekScreen() {
+    window.showAddWeekScreen = function() {
       editingWeekKey = null;
       document.getElementById('form-title').textContent = "Lägg till glosor";
       document.getElementById('setup-screen').classList.add('hidden');
@@ -308,7 +323,7 @@
       document.getElementById('word-inputs-container').innerHTML = '';
     }
 
-    function editCurrentWeek() {
+    window.editCurrentWeek = function() {
       const selectedWeek = document.getElementById('week-select').value;
       if (!selectedWeek) return;
 
@@ -323,8 +338,8 @@
       words.forEach(w => { addWordRow(w.en, w.sv); });
     }
 
-    // --- GEMINI AI KAMERA-SKANNER ---
-    async function processImageWithGemini(event) {
+    // --- GEMINI AI KAMERA-SKANNER VIA OFFICIELLA SDK ---
+    window.processImageWithGemini = async function(event) {
       const file = event.target.files[0];
       if (!file) return;
 
@@ -337,23 +352,24 @@
         const mimeType = file.type;
 
         try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { text: "Detta är en bild på en engelsk glosläxa med engelska ord i en kolumn och svenska ord i en annan. Läs av alla glosor. Svara ENDAST i exakt detta format per rad, ingenting annat: engelska|svenska (t.ex. dog|hund)." },
-                  { inline_data: { mime_type: mimeType, data: base64String } }
-                ]
-              }]
-            })
+          // Vi använder Googles officiella SDK-anrop som stöder AQ-nycklar
+            const response = await ai.models.generateContent({
+            model: 'gemini-3.6-flash',
+            contents: [
+              {
+                text: "Detta är en bild på en engelsk glosläxa med engelska ord i en kolumn och svenska ord i en annan. Läs av alla glosor. Svara ENDAST i exakt detta format per rad, ingenting annat: engelska|svenska (t.ex. dog|hund)."
+              },
+              {
+                inlineData: {
+                  mimeType: mimeType,
+                  data: base64String
+                }
+              }
+            ]
           });
 
-          const data = await response.json();
-          if (data.candidates && data.candidates[0].content) {
-            const textResponse = data.candidates[0].content.parts[0].text;
-            
+          const textResponse = response.text;
+          if (textResponse) {
             document.getElementById('word-inputs-container').innerHTML = '';
             
             const lines = textResponse.split('\n');
@@ -379,11 +395,11 @@
             }
           } else {
             statusEl.style.color = "var(--error)";
-            statusEl.textContent = "❌ AI-svar saknas. Kolla din API-nyckel.";
+            statusEl.textContent = "❌ AI-svar saknas.";
           }
         } catch (err) {
           statusEl.style.color = "var(--error)";
-          statusEl.textContent = "❌ Ett fel uppstod vid nätverksanropet.";
+          statusEl.textContent = "❌ Ett fel uppstod vid AI-anropet.";
           console.error(err);
         }
       };
@@ -400,8 +416,9 @@
       `;
       container.appendChild(row);
     }
+    window.addWordRow = addWordRow;
 
-    async function saveWeek() {
+    window.saveWeek = async function() {
       const titleInput = document.getElementById('new-week-title').value.trim();
       if (!titleInput) {
         alert("Fyll i ett namn för veckan (t.ex. Vecka 42)");
@@ -441,19 +458,19 @@
       }
     }
 
-    function cancelAddWeek() {
+    window.cancelAddWeek = function() {
       document.getElementById('add-week-screen').classList.add('hidden');
       document.getElementById('setup-screen').classList.remove('hidden');
     }
 
-    async function deleteCurrentWeek() {
+    window.deleteCurrentWeek = async function() {
       const selectedWeek = document.getElementById('week-select').value;
       if (confirm(`Är du säker på att du vill ta bort "${selectedWeek}"?`)) {
         await db.collection("glosor").doc(selectedWeek).delete();
       }
     }
 
-    function startQuiz() {
+    window.startQuiz = function() {
       const selectedWeek = document.getElementById('week-select').value;
       mode = document.getElementById('mode-select').value;
       
@@ -493,7 +510,7 @@
       }
     }
 
-    function speakCurrentWord() {
+    window.speakCurrentWord = function() {
       const current = currentWords[currentIndex];
       const utterance = new SpeechSynthesisUtterance(current.en);
       
@@ -523,7 +540,7 @@
       window.speechSynthesis.speak(utterance);
     }
 
-    function checkAnswer(e) {
+    window.checkAnswer = function(e) {
       e.preventDefault();
       const input = document.getElementById('user-input').value.trim().toLowerCase();
       const current = currentWords[currentIndex];
@@ -549,7 +566,7 @@
       document.getElementById('next-btn').focus();
     }
 
-    function nextWord() {
+    window.nextWord = function() {
       currentIndex++;
       if (currentIndex < currentWords.length) {
         showWord();
@@ -565,7 +582,7 @@
         `Bra kört! Du fick ${score} av ${currentWords.length} rätt!`;
     }
 
-    function restart() {
+    window.restart = function() {
       document.getElementById('result-screen').classList.add('hidden');
       document.getElementById('setup-screen').classList.remove('hidden');
     }
