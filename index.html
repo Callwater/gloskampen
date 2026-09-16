@@ -143,7 +143,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   
-  <!-- Tesseract.js (Gratis AI för textigenkänning) -->
+  <!-- Tesseract.js -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
@@ -200,7 +200,6 @@
 
         <textarea id="bulk-import" rows="3" placeholder="AI:n klistrar in texten här... Du kan även skriva själv."></textarea>
         
-        <!-- Välj ordning på kolumnerna -->
         <select id="import-order" style="margin-bottom: 10px; font-size: 0.9rem;">
           <option value="en-sv">Spaltordning: Engelska till vänster, Svenska till höger</option>
           <option value="sv-en">Spaltordning: Svenska till vänster, Engelska till höger</option>
@@ -270,7 +269,6 @@
     let editingWeekKey = null;
 
     window.onload = () => {
-      // Ladda röster direkt
       window.speechSynthesis.getVoices();
 
       db.collection("glosor").onSnapshot((snapshot) => {
@@ -331,41 +329,73 @@
       words.forEach(w => { addWordRow(w.en, w.sv); });
     }
 
-    // --- AI KAMERA-SKANNER (Tesseract.js v5) ---
-    async function processImage(event) {
+    // --- FIXAD BILDHANTERARE (Krymper mobilbilder så Tesseract förstår dem) ---
+    function processImage(event) {
       const file = event.target.files[0];
       if (!file) return;
       
       const statusEl = document.getElementById('ocr-status');
       statusEl.style.color = "var(--primary)";
-      statusEl.textContent = "Startar AI-motorn... ⏳";
-      
-      try {
-        const worker = await Tesseract.createWorker('eng+swe', 1, {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              statusEl.textContent = `Läser av bilden: ${Math.round(m.progress * 100)}% klara... ⏳`;
-            } else {
-              statusEl.textContent = `Förbereder: ${m.status}... ⏳`;
-            }
+      statusEl.textContent = "Förbereder bilden... ⏳";
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = async function() {
+          // Skala ner bilden om den är för stor (vilket är standard för mobilkameror)
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1200; // Perfekt storlek för Tesseract
+
+          if (width > height && width > maxDim) {
+            height *= maxDim / width;
+            width = maxDim;
+          } else if (height > maxDim) {
+            width *= maxDim / height;
+            height = maxDim;
           }
-        });
-        
-        await worker.setParameters({
-          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
-        });
-        
-        const result = await worker.recognize(file);
-        await worker.terminate(); 
-        
-        document.getElementById('bulk-import').value = result.data.text;
-        statusEl.style.color = "var(--success)";
-        statusEl.textContent = "✅ Texten är inläst! Kontrollera den och klicka på knappen nedan.";
-      } catch (err) {
-        statusEl.style.color = "var(--error)";
-        statusEl.textContent = "❌ Ett fel uppstod. Ljuset kanske var för dåligt, försök igen.";
-        console.error(err);
-      }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Gör om till optimerad bildfil
+          const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+          statusEl.textContent = "Startar AI-motorn... ⏳";
+          
+          try {
+            const worker = await Tesseract.createWorker('eng+swe', 1, {
+              logger: m => {
+                if (m.status === 'recognizing text') {
+                  statusEl.textContent = `Läser av bilden: ${Math.round(m.progress * 100)}% klara... ⏳`;
+                } else {
+                  statusEl.textContent = `Förbereder: ${m.status}... ⏳`;
+                }
+              }
+            });
+            
+            await worker.setParameters({
+              tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+            });
+            
+            const result = await worker.recognize(optimizedDataUrl);
+            await worker.terminate(); 
+            
+            document.getElementById('bulk-import').value = result.data.text;
+            statusEl.style.color = "var(--success)";
+            statusEl.textContent = "✅ Texten är inläst! Kontrollera den nedan.";
+          } catch (err) {
+            statusEl.style.color = "var(--error)";
+            statusEl.textContent = "❌ Ett fel uppstod vid avläsning.";
+            console.error(err);
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
     }
 
     function processBulkImport() {
@@ -507,7 +537,6 @@
       const voices = window.speechSynthesis.getVoices();
       
       if (voices.length > 0) {
-        // Leta specifikt efter kända kvinnliga engelska röster
         const femaleVoice = voices.find(v => 
           v.name.includes("Samantha") || 
           v.name.includes("Zira") ||     
